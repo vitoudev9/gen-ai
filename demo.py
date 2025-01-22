@@ -1,5 +1,5 @@
 from langchain.chains import LLMChain
-from langchain_community.chat_models import BedrockChat
+from langchain.memory import ConversationBufferMemory
 from langchain.prompts import PromptTemplate
 from langchain_aws import ChatBedrock
 import boto3
@@ -26,27 +26,58 @@ llm = ChatBedrock(
     ##model_kwargs={"max_tokens_to_sample": 2000,"temperature":0.9}
 )
 
-def my_chatbot(language,freeform_text):
+memory = ConversationBufferMemory(memory_key="chat_history")
+
+def my_chatbot():
+
+    st.title("Auralis Chatbot")
+
     prompt = PromptTemplate(
-        input_variables=["language", "freeform_text"],
-        template="You are a chatbot. You are in {language}.\n\n{freeform_text}"
+        input_variables=["chat_history", "text_input"],
+        template = """
+        The following is a friendly conversation between a user and an AI assistant. The assistant remembers past interactions and provides helpful responses.
+
+        Chat History:
+        {chat_history}
+
+        User: {text_input}
+        AI:
+        """
+        #template="You are a chatbot. You are in {language}.\n\n{freeform_text}"
     )
 
-    bedrock_chain = LLMChain(llm=llm, prompt=prompt)
+    bedrock_chain = LLMChain(llm=llm, prompt=prompt, memory=memory)
 
-    response=bedrock_chain({'language':language, 'freeform_text':freeform_text})
-    return response
+    # Session state to store conversation history
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
 
-#print(my_chatbot("english","who is buddha?"))
+    if "messages" not in st.session_state:
+        st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]
 
-st.title("Bedrock Chatbot")
+    #if prompt := st.chat_input():
+    
+    for message in st.session_state.chat_history:
+        with st.chat_message(message["role"]):
+            st.markdown(message["text"])
 
-language = st.sidebar.selectbox("Language", ["english", "spanish"])
+    input_text = st.chat_input("Type Hi to start the conversion")
 
-if language:
-    freeform_text = st.sidebar.text_area(label="what is your question?",
-    max_chars=100)
+    if (input_text):
+        with st.chat_message("user"):
+            st.markdown(input_text)
+        st.session_state.chat_history.append({"role":"user", "text":input_text })
 
-if freeform_text:
-    response = my_chatbot(language,freeform_text)
-    st.write(response['text'])
+        chat_response = bedrock_chain.run({"text_input": input_text})
+        with st.chat_message("assistant"):
+            st.markdown(chat_response)
+        st.session_state.chat_history.append({"role":"assistant", "text":chat_response })
+
+my_chatbot()
+
+
+
+
+
+
+
